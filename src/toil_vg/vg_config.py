@@ -82,8 +82,8 @@ def generate_config():
 
         ###########################################
         ### Arguments Shared Between Components ###
-        # Use output store instead of toil for all intermediate files (use only for debugging)
-        force-outstore: False
+        # Checkpoint all intermediate files to the output store (for debugging)
+        checkpoint-all: False
         
         #############################
         ### Docker Tool Arguments ###

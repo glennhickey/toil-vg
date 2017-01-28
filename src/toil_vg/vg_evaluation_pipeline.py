@@ -195,9 +195,6 @@ def run_pipeline_merge_vcf(job, options, vcf_tbi_file_id_pair_list):
 
     RealTimeLogger.get().info("Completed gam merging and gam path variant calling.")
     RealTimeLogger.get().info("Starting vcf merging vcf files.")
-    # Set up the IO stores each time, since we can't unpickle them on Azure for
-    # some reason.
-    out_store = IOStore.get(options.out_store)
 
     # Define work directory for docker calls
     work_dir = job.fileStore.getLocalTempDir()
@@ -225,8 +222,8 @@ def run_pipeline_merge_vcf(job, options, vcf_tbi_file_id_pair_list):
     out_store_key = "{}.vcf.gz".format(options.sample_name)
     vcf_file = os.path.join(work_dir, vcf_merged_file_key)
     vcf_file_idx = vcf_file + ".tbi"
-    write_to_store(job, options, vcf_file, use_out_store = True, out_store_key = out_store_key)
-    write_to_store(job, options, vcf_file_idx, use_out_store = True, out_store_key = out_store_key + ".tbi") 
+    write_to_store(job, options, vcf_file, copy_to_out_store = True, out_store_key = out_store_key)
+    write_to_store(job, options, vcf_file_idx, copy_to_out_store = True, out_store_key = out_store_key + ".tbi") 
 
 
 def main():
@@ -264,7 +261,7 @@ def main():
     7 = Download output files from remote output fileStore to local output directory
     ================================================================================
     Dependencies
-    toil:           pip install toil (version >= 3.5.0a1.dev241)
+    toil:           pip install toil (version >= 3.5.0a1.dev251)
     toil-lib:       git clone --recursive https://github.com/cmarkello/toil-lib.git ${PWD}/toil-lib/
                     pip install ${PWD}/toil-lib/
     biopython:      pip install biopython (version >= 1.67)
@@ -293,6 +290,10 @@ def main():
     require(options.chroms is not None and len(options.chroms) > 0,
             'at least one chromosome must be specified with --chroms')
 
+    # Make sure the output store exists and is valid, and through
+    # a little record of the command line options and version inside it. 
+    init_out_store(options, args.command)
+    
     if args.command == 'run':
         pipeline_main(options)
     elif args.command == 'index':
@@ -318,8 +319,6 @@ def pipeline_main(options):
     require(len(options.chroms) == len(options.graphs), '--chrom and --graph must have'
             ' same number of arguments')
 
-    # Throw error if something wrong with IOStore string
-    IOStore.get(options.out_store)
 
     # How long did it take to run the entire pipeline, in seconds?
     run_time_pipeline = None

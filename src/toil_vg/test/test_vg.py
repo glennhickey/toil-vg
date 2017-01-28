@@ -100,7 +100,7 @@ class VGCGLTest(TestCase):
         self._run(self.base_command, self.jobStoreLocal, self.sample_reads, 'NA12877',
                   self.local_outstore,  '--gcsa_index', self.test_gcsa_index,
                   '--xg_index', self.test_xg_index, '--graphs', self.test_vg_graph,
-                  '--chroms', '19', '--force_outstore')
+                  '--chroms', '19', '--checkpoint_all')
         self._assertOutput('NA12877_19.vcf', self.local_outstore)
 
     def test_chr6_MHC_sampleNA12877(self):

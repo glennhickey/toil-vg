@@ -150,9 +150,6 @@ def run_whole_alignment(job, options, xg_file_id, gcsa_and_lcp_ids, fastq_chunk_
 def run_chunk_alignment(job, options, chunk_filename_id, chunk_id, xg_file_id, gcsa_and_lcp_ids):
 
     RealTimeLogger.get().info("Starting alignment on {} chunk {}".format(options.sample_name, chunk_id))
-    # Set up the IO stores each time, since we can't unpickle them on Azure for
-    # some reason.
-    out_store = IOStore.get(options.out_store)
 
     # How long did the alignment take to run, in seconds?
     run_time = None
@@ -329,12 +326,9 @@ def run_merge_chrom_gam(job, options, chr_name, chunk_file_ids):
             read_from_store(job, options, chunk_gam_id, tmp_gam_file)
             with open(tmp_gam_file) as tmp_f:
                 shutil.copyfileobj(tmp_f, merge_file)
-                
-    chr_gam_id = write_to_store(job, options, output_file)
 
-    # checkpoint to out store
-    if not options.force_outstore or options.tool == 'map':
-        write_to_store(job, options, output_file, use_out_store = True)
+    # Write to file store and checkpoint to output store
+    chr_gam_id = write_to_store(job, options, output_file, copy_to_out_store = True)
             
     return chr_gam_id
 

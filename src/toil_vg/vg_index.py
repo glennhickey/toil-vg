@@ -167,20 +167,15 @@ def run_gcsa_indexing(job, options, kmers_ids):
         command += ['-i', os.path.basename(kmers_filename)]
     options.drunner.call(command, work_dir=work_dir)
 
-    # Checkpoint index to output store
-    if not options.force_outstore or options.tool == 'index':
-        write_to_store(job, options, os.path.join(work_dir, gcsa_filename), use_out_store = True)
-        write_to_store(job, options, os.path.join(work_dir, gcsa_filename) + ".lcp", use_out_store = True)
-
-    # Not in standalone Mode, then we write it to the file store
-    if options.tool != 'index':
-        gcsa_file_id = write_to_store(job, options, os.path.join(work_dir, gcsa_filename))
-        lcp_file_id = write_to_store(job, options, os.path.join(work_dir, gcsa_filename) + ".lcp")
-        return gcsa_file_id, lcp_file_id
+    # Write to file store and checkpoint index to output store
+    gcsa_file_id = write_to_store(job, options, os.path.join(work_dir, gcsa_filename), copy_to_out_store = True)
+    lcp_file_id = write_to_store(job, options, os.path.join(work_dir, gcsa_filename) + ".lcp", copy_to_out_store = True)
 
     end_time = timeit.default_timer()
     run_time = end_time - start_time
     RealTimeLogger.get().info("Finished GCSA index. Process took {} seconds.".format(run_time))
+
+    return gcsa_file_id, lcp_file_id
 
 def run_xg_indexing(job, options, inputGraphFileIDs):
     """ Make the xg index and return its store id
@@ -200,7 +195,7 @@ def run_xg_indexing(job, options, inputGraphFileIDs):
         graph_filenames.append(os.path.basename(graph_filename))
 
     # Where do we put the XG index?
-    xg_filename = graph_filename + ".xg"
+    xg_filename = "genome.xg"
 
     # Now run the indexer.
     RealTimeLogger.get().info("XG Indexing {}".format(str(graph_filenames)))            
@@ -210,20 +205,14 @@ def run_xg_indexing(job, options, inputGraphFileIDs):
     
     options.drunner.call(command, work_dir=work_dir)
 
-    # Checkpoint index to output store
-    if not options.force_outstore or options.tool == 'index':
-        write_to_store(job, options, os.path.join(work_dir, xg_filename), use_out_store = True)
-
-    # Not in standalone Mode, then we write it to the file store
-    if options.tool != 'index':
-        xg_file_id = write_to_store(job, options, os.path.join(work_dir, xg_filename))
-        return xg_file_id
+    # Write index to file store and checkpoint index to output store
+    xg_file_id = write_to_store(job, options, os.path.join(work_dir, xg_filename), copy_to_out_store = True)
 
     end_time = timeit.default_timer()
     run_time = end_time - start_time
     RealTimeLogger.get().info("Finished XG index. Process took {} seconds.".format(run_time))
 
-    
+    return xg_file_id
 
 def run_indexing(job, options, inputGraphFileIDs):
     """ run indexing logic by itself.  Return pair of idx for xg and gcsa output index files  

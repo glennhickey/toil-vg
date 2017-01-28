@@ -7,6 +7,7 @@ from __future__ import print_function
 import argparse, sys, os, os.path, random, subprocess, shutil, itertools, glob
 import json, timeit, errno
 from uuid import uuid4
+import pkg_resources, tempfile, datetime
 
 from toil.common import Toil
 from toil.job import Job
@@ -31,8 +32,8 @@ def add_common_vg_parse_args(parser):
     parser.add_argument('--config', default=None, type=str,
                         help='Config file.  Use toil-vg generate-config to see defaults/create new file')
     
-    parser.add_argument("--force_outstore", action="store_true",
-                        help="use output store instead of toil for all intermediate files (use only for debugging)")
+    parser.add_argument("--checkpoint_all", action="store_true",
+                        help="checkpoint all intermediate files to out store too (use only for debugging)")
                         
     parser.add_argument("--chroms", nargs='+',
                         help="Name(s) of reference path in graph(s) (separated by space).  If --graphs "
@@ -195,75 +196,91 @@ def clean_toil_path(path):
     else:
         return path
 
-def import_to_store(toil, options, path, use_out_store = None,
+def init_out_store(options, command):
+    """
+    Write a little bit of logging to the output store.
+    
+    Rely on IOStore to create the store if it doesn't exist
+    as well as to check its a valid location
+     
+    This is the only point in the code now where IOStore is used.
+    Otherwise it's been replaced by Toil's export functions.  
+    """
+    f = tempfile.NamedTemporaryFile(delete=True)
+    now = datetime.datetime.now()
+    f.write('{}\ntoil-vg {} version {}\nOptions:'.format(now, command,
+                    pkg_resources.get_distribution('toil-vg').version))
+    for key,val in options.__dict__.items():
+        f.write('{}: {}\n'.format(key, val))
+    f.flush()
+    IOStore.get(options.out_store).write_output_file(f.name, 'toil-vg-cmd.txt'.format(
+        str(now).replace(':', '-').replace(' ', '-')))
+    f.close()
+
+    
+def import_to_store(toil, options, path, copy_to_out_store = None,
                     out_store_key = None):
     """
     Imports a path into the File or IO store
-
-    Abstract all store writing here so we can switch to the out_store
-    when we want to checkpoint an intermeidate file for output
-    or just have all intermediate files in the outstore for debugging.
     
-    Returns the id in job's file store if use_out_store is True
-    otherwise a key (up to caller to make sure its unique)
-    in the out_store
+    Returns the id. 
 
-    By default options.force_outstore is used to toggle between file and 
-    i/o store.  This will be over-ridden by the use_out_store parameter 
-    if the latter is not None
+    (This is a relic of the old force_outstore logic.  Keep 
+    it around in case we ever want to do something in all imports)
     """
-    if use_out_store is True or (use_out_store is None and options.force_outstore is True):
-        return write_to_store(None, options, path, use_out_store, out_store_key)
-    else:
-        return toil.importFile(clean_toil_path(path))
-    
-def write_to_store(job, options, path, use_out_store = None,
+    return toil.importFile(clean_toil_path(path))
+
+def write_to_store(job, options, path, copy_to_out_store = None,
                    out_store_key = None):
     """
     Writes path into the File or IO store (from options.out_store)
 
-    Abstract all store writing here so we can switch to the out_store
-    when we want to checkpoint an intermeidate file for output
-    or just have all intermediate files in the outstore for debugging.
-    
-    Returns the id in job's file store if use_out_store is True
-    otherwise a key (up to caller to make sure its unique)
-    in the out_store
+    Returns the id in job's file store
 
-    By default options.force_outstore is used to toggle between file and 
-    i/o store.  This will be over-ridden by the use_out_store parameter 
+    Abstract all store writing here, so we can switch on checkpointing
+    centrally.  If checkpointing on, files are duplicated in the out store
+
+    By default options.checkpoint_all is used to enable checkpointing. 
+    This will be over-ridden by the copy_to_out_store parameter 
     if the latter is not None
     """
-    if use_out_store is True or (use_out_store is None and options.force_outstore is True):
+    file_id = job.fileStore.writeGlobalFile(path)
+    
+    if copy_to_out_store is True or (copy_to_out_store is None and options.checkpoint_all is True):
         out_store = IOStore.get(options.out_store)
         key = os.path.basename(path) if out_store_key is None else out_store_key
-        out_store.write_output_file(path, key)
-        return key
-    else:
-        return job.fileStore.writeGlobalFile(path)
+        exp_path = os.path.join(options.out_store, key)
+        # copied from IOStore.get():
+        if exp_path[0] in '/.':
+            exp_path = 'file://' + exp_path
+        else:
+            store_type, store_arguments = exp_path.split(":", 1)
+            if store_type == 'aws':
+                region, bucket_name = store_arguments.split(":", 1)
+                exp_path = 's3://' + bucket_name
+            elif store_type == 'azure':
+                account, container = store_arguments.split(":", 1)
+                exp_path = 'wasb://' + container
 
-def read_from_store(job, options, id_or_key, path = None, use_out_store = None):
+        # Calling job.fileStore.exportFile() too soon after job.fileStore.writeGlobalFile
+        # often causes the file to disappear or get truncated.
+        time.sleep(10)
+        RealTimeLogger.get().info("Exporting {} to output store: {}".format(str(file_id), exp_path))
+        job.fileStore.exportFile(file_id, exp_path)
+
+    return file_id 
+
+
+def read_from_store(job, options, file_id, path = None, copy_to_out_store = None):
     """
-    Reads id (or key) from the File store (or IO store from options.out_store) into path
+    Reads id from the File store into path
 
-    Abstract all store reading here so we can switch to the out_store
-    when we want to checkpoint an intermeidate file for output
-    or just have all intermediate files in the outstore for debugging.
-
-    By default options.force_outstore is used to toggle between file and 
-    i/o store.  This will be over-ridden by the use_out_store parameter 
-    if the latter is not None
+    (No longer useful now that we never read from outstore. Will leave 
+    for now in case we ever want to add something to all file reads)
     """
-    if use_out_store is True or (use_out_store is None and options.force_outstore is True):
-        # we can add this interface if we really want by coming up
-        # with unique name here, i guess
-        assert path is not None
-        out_store = IOStore.get(options.out_store)
-        return out_store.read_input_file(id_or_key, path)
-    else:
-        return job.fileStore.readGlobalFile(id_or_key, path)
+    return job.fileStore.readGlobalFile(file_id, path)
 
-def write_dir_to_store(job, options, path, use_out_store = None):
+def write_dir_to_store(job, options, path, copy_to_out_store = None):
     """
     Need directory interface for rocksdb indexes.  Want to avoid overhead
     of tar-ing up as they may be big.  Write individual files instead, and 
@@ -272,12 +289,12 @@ def write_dir_to_store(job, options, path, use_out_store = None):
     out_pairs = []
     file_list = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
     for f in file_list:
-        f_id = write_to_store(job, options, f, use_out_store = use_out_store,
+        f_id = write_to_store(job, options, f, copy_to_out_store = copy_to_out_store,
                               out_store_key = path.replace('/', '_'))
         out_pairs.append(os.path.basename(f), f_id)
     return out_pairs
 
-def read_dir_from_store(job, options, name_id_pairs, path = None, use_out_store = None):
+def read_dir_from_store(job, options, name_id_pairs, path = None, copy_to_out_store = None):
     """
     Need directory interface for rocksdb indexes.  Want to avoid overhead
     of tar-ing up as they may be big.  Takes as input list of filename/id pairs
@@ -288,7 +305,7 @@ def read_dir_from_store(job, options, name_id_pairs, path = None, use_out_store 
 
     for name, key in name_id_pairs:
         read_from_store(job, options, key, os.path.join(path, name),
-                        use_out_store = use_out_store)
+                        copy_to_out_store = copy_to_out_store)
     
 
 def batch_iterator(iterator, batch_size):
