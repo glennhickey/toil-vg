@@ -262,9 +262,11 @@ def get_gam_positions(job, options, xg_file_id, name, gam_file_id):
 
     out_pos_file = gam_file + '.pos'
                            
-    # go through intermediate json file until docker worked out
     gam_annot_json = gam_file + '.json'
     cmd = [['vg', 'annotate', '-p', '-a', os.path.basename(gam_file), '-x', os.path.basename(xg_file)]]
+    # make sure we don't have any secondary mappings
+    cmd.append(['vg', 'filter', '-f', '-s', '2', '-r', '-2', '-'])
+    # go through intermediate json file until docker worked out    
     cmd.append(['vg', 'view', '-aj', '-'])
     with open(gam_annot_json, 'w') as output_annot_json:
         options.drunner.call(job, cmd, work_dir = work_dir, outfile=output_annot_json)
