@@ -52,7 +52,7 @@ def index_parse_args(parser):
                         help="input graph(s). one per chromosome (separated by space)")
 
     parser.add_argument("--chroms", nargs='+',
-                        help="Name(s) of reference path in graph(s) (separated by space).  If --graphs "
+                        help="Name(s) of reference path in graph(s) (separated by space).  If multiple --graphs "
                         " specified, must be same length/order as --chroms")
 
     parser.add_argument("--gcsa_index_cores", type=int,
@@ -177,11 +177,18 @@ def run_gcsa_prep(job, options, input_graph_ids, primary_path_override=None):
     # is it worth it to distrbute?  files are so big to move around...
     for graph_i, input_graph_id in enumerate(input_graph_ids):
         # For each input graph
-        
+
         # Determine the primary path list to use
-        primary_paths = ([options.chroms[graph_i]] if primary_path_override
-            is None else primary_path_override)
-        
+        if primary_path_override:
+            primary_paths = None
+        else:
+            if len(input_graph_ids) > 1:
+                # 1 chrom / graph
+                primary_paths = [options.chroms[graph_i]]
+            else:
+                # many chroms / 1 graph
+                primary_paths = options.chroms
+                        
         # Make the kmers, passing along the primary path names
         kmers_id = job.addChildJobFn(run_gcsa_prune, options, graph_i, input_graph_id,
                                      primary_paths=primary_paths,
@@ -249,7 +256,7 @@ def run_xg_indexing(job, options, inputGraphFileIDs):
     # Our local copy of the graphs
     graph_filenames = []
     for i, graph_id in enumerate(inputGraphFileIDs):
-        graph_filename = os.path.join(work_dir, '{}.vg'.format(options.chroms[i]))
+        graph_filename = os.path.join(work_dir, '{}.vg'.format(os.path.basename(options.graphs[i])))
         read_from_store(job, options, graph_id, graph_filename)
         graph_filenames.append(os.path.basename(graph_filename))
 
@@ -313,7 +320,7 @@ def run_id_range(job, options, graph_i, graph_id):
     work_dir = job.fileStore.getLocalTempDir()
 
     # download graph
-    graph_filename = os.path.join(work_dir, '{}.vg'.format(options.chroms[graph_i]))
+    graph_filename = os.path.join(work_dir, '{}.vg'.format(os.path.basename(options.graphs[graph_i])))
     read_from_store(job, options, graph_id, graph_filename)
 
     #run vg stats
@@ -323,7 +330,9 @@ def run_id_range(job, options, graph_i, graph_id):
     assert stats_out[0] == 'node-id-range'
     first, last = stats_out[1].split(':')
 
-    return options.chroms[graph_i], first, last
+    name = (options.chroms[graph_i] if len(options.chroms) == len(options.graphs) else
+            os.path.basename(options.graphs[graph_i]))
+    return name, first, last
     
 def run_merge_id_ranges(job, options, id_ranges):
     """ create a BED-style file of id ranges
@@ -374,8 +383,9 @@ def index_main(options):
     options.tool = 'index'
 
     require(options.chroms and options.graphs, '--chroms and --graphs must be specified')
-    require(len(options.chroms) == len(options.graphs), '--chroms and --graphs must have'
-            ' same number of arguments')
+    if len(options.graphs) > 1:
+        require(len(options.chroms) == len(options.graphs), '--chroms and --graphs must have'
+                ' same number of arguments when more than one graph specified')
 
     # Throw error if something wrong with IOStore string
     IOStore.get(options.out_store)
