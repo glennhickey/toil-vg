@@ -101,10 +101,10 @@ to do: Should go somewhere more central """
             args[i] = [str(x) for x in args[i]]
         name = tool_name if tool_name is not None else args[0][0]
 
-        if self.container_support == 'Docker' and name in self.docker_tool_map and\
+        if self.container_support.lower() == 'docker' and name in self.docker_tool_map and\
            self.docker_tool_map[name] and self.docker_tool_map[name].lower() != 'none':
             return self.call_with_docker(job, args, work_dir, outfile, errfile, check_output, tool_name)
-        elif self.container_support == 'Singularity' and name in self.docker_tool_map and\
+        elif self.container_support.lower() == 'singularity' and name in self.docker_tool_map and\
            self.docker_tool_map[name] and self.docker_tool_map[name].lower() != 'none':
             return self.call_with_singularity(job, args, work_dir, outfile, errfile, check_output, tool_name)
         else:
