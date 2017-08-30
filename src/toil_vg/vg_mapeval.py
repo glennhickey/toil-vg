@@ -716,12 +716,12 @@ def run_map_eval_align(job, context, index_ids, gam_names, gam_file_ids, reads_g
                                                   cores=context.config.misc_cores,
                                                   memory=context.config.misc_mem, disk=context.config.misc_disk).rv())
 
-        # make sure associated lists are extended to fit new paired end mappings
+        # make sure associated lists are extended to fit new multipath mappings
         for i in range(len(xg_ids)):
             xg_ids.append(xg_ids[i])
             gam_names.append(gam_names[i] + '-mp')
 
-    if do_vg_mapping and do_vg_paired and not multipath:
+    if do_vg_mapping and do_vg_paired:
         # run paired end version of all vg inputs if --pe-gams specified
         for i, index_id in enumerate(index_ids):
             gam_file_ids.append(job.addChildJobFn(run_mapping, context, False,
@@ -730,11 +730,27 @@ def run_map_eval_align(job, context, index_ids, gam_names, gam_file_ids, reads_g
                                                   None, [reads_gam_file_id],
                                                   cores=context.config.misc_cores,
                                                   memory=context.config.misc_mem, disk=context.config.misc_disk).rv())
-            
+
         # make sure associated lists are extended to fit new paired end mappings
         for i in range(len(xg_ids)):
             xg_ids.append(xg_ids[i])
             gam_names.append(gam_names[i] + '-pe')
+            
+
+    if do_vg_mapping and do_vg_paired and multipath:
+        # run paired end version of all vg inputs if --pe-gams specified
+        for i, index_id in enumerate(index_ids):
+            gam_file_ids.append(job.addChildJobFn(run_mapping, context, False,
+                                                  'input.gam', 'aligned-{}-pe'.format(gam_names[i]),
+                                                  True, True, index_id[0], index_id[1],
+                                                  None, [reads_gam_file_id],
+                                                  cores=context.config.misc_cores,
+                                                  memory=context.config.misc_mem, disk=context.config.misc_disk).rv())
+                    
+        # make sure associated lists are extended to fit new paired end multipath mappings
+        for i in range(len(xg_ids)):
+            xg_ids.append(xg_ids[i])
+            gam_names.append(gam_names[i] + '-mp-pe')
         
     # run bwa if requested
     bwa_bam_file_ids = [None, None]
