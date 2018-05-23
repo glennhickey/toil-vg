@@ -18,10 +18,15 @@ def parse_args(args):
                         help="chromosome(s) (default: everything in fasta)")
     parser.add_argument("--fasta", help="fasta. ideally already indexed with bwa index", required=True)
     parser.add_argument("--truth", help="vcf baseline to compare with", required=True)
+    parser.add_argument("--bed", help="bed regions to compare on")
     parser.add_argument("--names", nargs="*", default=["primary", "minaf_0.034"],
                         help="related graphs to try in addtion to xg_basename")
-    parser.add_argument("--outname", required=True, help="subdirectory in outstore for all output (same as mapeval-ec2.py)")    
-    parser.add_argument("--restart", action="store_true", help="resume toil workflow")    
+    parser.add_argument("--outname", required=True, help="subdirectory in outstore for all output (same as mapeval-ec2.py)")
+    parser.add_argument("--surject", action="store_true", help="surject input GAMs and run freebayes on them")
+    parser.add_argument("--call", action="store_true", help="run vg call on input GAMs")
+    parser.add_argument("--genotype", action="store_true", help="run vg genotype on input GAMs")
+    parser.add_argument("--restart", action="store_true", help="resume toil workflow")
+    
     args = args[1:]
     return parser.parse_args(args)
 options = parse_args(sys.argv)
@@ -42,9 +47,15 @@ cmd = ['calleval', options.job_store, me_outstore,
        '--logFile', log_name,       
        '--vcfeval_fasta', options.fasta,
        '--vcfeval_baseline', options.truth,
-       '--sample_name', 'SAMPLE',
-       '--call_and_genotype']
-
+       '--sample_name', 'SAMPLE']
+if options.bed:
+    cmd += ['--vcfeval_bed_regions', options.bed]
+if options.surject:
+    cmd += ['--surject']
+if options.call:
+    cmd += ['--call']
+if options.genotype:
+    cmd += ['--genotype']
 if options.chroms:
     cmd += ['--chroms'] + options.chroms
 
