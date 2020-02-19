@@ -187,7 +187,7 @@ bedtools-docker: 'quay.io/biocontainers/bedtools:2.27.0--1'
 bedops-docker: 'quay.io/biocontainers/bedops:2.4.35--0'
 
 # Docker image to use for sveval R package
-sveval-docker: 'jmonlong/sveval:version-1.2.0'
+sveval-docker: 'jmonlong/sveval:version-1.2.2'
 
 ##############################
 ### vg_construct Arguments ###
@@ -466,7 +466,7 @@ bedtools-docker: 'quay.io/biocontainers/bedtools:2.27.0--1'
 bedops-docker: 'quay.io/biocontainers/bedops:2.4.35--0'
 
 # Docker image to use for sveval R package
-sveval-docker: 'jmonlong/sveval:version-1.2.0'
+sveval-docker: 'jmonlong/sveval:version-1.2.2'
 
 ##############################
 ### vg_construct Arguments ###
